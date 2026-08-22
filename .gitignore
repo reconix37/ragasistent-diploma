@@ -1,0 +1,15 @@
+# секреты/локально
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# модели скачиваются в кэш HF, индексы пересобираются — не храним
+.chromadb/
+vectorstore/
+.bm25_cache/
+
+# dev-мусор
+screenshots/
+*.log

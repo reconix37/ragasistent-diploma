@@ -1,0 +1,11 @@
+# Ядро RAG-ассистента. chromadb НЕ нужен — векторы хранятся в numpy.
+# Требует Python 3.11 или 3.12 (3.13+/3.14 пока без numpy-полные бинарники).
+# numpy 2.x — уже есть готовый бинарник под cp312-win (не собирается из исходников).
+
+streamlit==1.62.0
+openai==3.3.1
+numpy==2.4.6
+rank-bm25==0.2.2
+sentence-transformers==6.0.0
+scikit-learn==1.9.0
+# torch подтянется сам как зависимость sentence-transformers (есть cp312-win бинарник).
