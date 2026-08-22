@@ -161,6 +161,19 @@ div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
 [data-testid="stChatInput"] input::placeholder { color:var(--faint); }
 
 .stCaption, [data-testid="stCaptionContainer"] { color:var(--muted); }
+
+/* thinking indicator (animated dots) */
+.thinking { font-size:1.4rem; letter-spacing:.15em; color:var(--muted); animation: thinkpulse 1s steps(4) infinite; }
+@keyframes thinkpulse { 0%{opacity:.3} 50%{opacity:1} 100%{opacity:.3} }
+
+/* hide Community Cloud toolbar (Stop/Deploy/...) */
+[data-testid="stToolbar"], [data-testid="stStatusWidget"],
+div:has(> [data-testid="stToolbar"]) { display:none !important; }
+
+/* toggle visibility on light theme */
+[data-testid="stToggle"], [data-testid="stToggleSwitchContainer"] { opacity:1; }
+section[data-testid="stSidebar"] [data-testid="stToggleSwitchContainer"] [data-baseweb="checkbox"] {
+  background:var(--surface-2) !important; border:1px solid var(--border-2) !important; }
 </style>
 """
 
@@ -245,6 +258,19 @@ div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
 [data-testid="stChatInput"] input::placeholder { color:var(--faint); }
 
 .stCaption, [data-testid="stCaptionContainer"] { color:var(--muted); }
+
+/* thinking indicator (animated dots) */
+.thinking { font-size:1.4rem; letter-spacing:.15em; color:var(--muted); animation: thinkpulse 1s steps(4) infinite; }
+@keyframes thinkpulse { 0%{opacity:.3} 50%{opacity:1} 100%{opacity:.3} }
+
+/* hide Community Cloud toolbar (Stop/Deploy/...) */
+[data-testid="stToolbar"], [data-testid="stStatusWidget"],
+div:has(> [data-testid="stToolbar"]) { display:none !important; }
+
+/* toggle visibility on dark theme */
+[data-testid="stToggle"], [data-testid="stToggleSwitchContainer"] { opacity:1; }
+section[data-testid="stSidebar"] [data-testid="stToggleSwitchContainer"] [data-baseweb="checkbox"] {
+  background:var(--surface-2) !important; border:1px solid var(--border-2) !important; }
 </style>
 """
 
@@ -294,36 +320,9 @@ llm_ok = pipe.llm is not None
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-
-def ask(question: str):
-    """Прогон вопроса стримом, рендер чанков, в конце — метаданные."""
-    st.session_state.messages.append({"role": "user", "content": question})
-
-    # placeholder для стрима
-    with st.chat_message("assistant", avatar=avatar_for("assistant")):
-        buf = st.empty()
-        stream_gen = pipe.query_stream(question)
-        acc = ""
-        meta = None
-        for item in stream_gen:
-            if isinstance(item, dict):
-                meta = item
-                break
-            acc += item
-            buf.markdown(acc)
-        if meta is None:
-            meta = {"guardrail": False, "sources": [], "ok": True}
-        # в историю идёт отформатированный ответ (без "Zdroj:" в тексте)
-        final_answer = meta.get("answer") or acc
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": final_answer,
-            "guardrail": bool(meta.get("guardrail")),
-            "sources": meta.get("sources") or [],
-            "docs": meta.get("docs") or [],
-            "ok": meta.get("ok", True),
-        })
-        st.rerun()
+# pending_question: вопрос ожидает ответа (стрим идёт после рендера истории)
+if "pending_question" not in st.session_state:
+    st.session_state.pending_question = None
 
 
 # ---------- Сайдбар ----------
@@ -356,7 +355,9 @@ examples = [
 st.sidebar.markdown('<div class="sb-label">Skúste sa opýtať</div>', unsafe_allow_html=True)
 for ex in examples:
     if st.sidebar.button(ex, use_container_width=True):
-        ask(ex)
+        st.session_state.messages.append({"role": "user", "content": ex})
+        st.session_state.pending_question = ex
+        st.rerun()
 
 # ---------- Чат: рендер истории ----------
 for m in st.session_state.messages:
@@ -367,7 +368,6 @@ for m in st.session_state.messages:
                 st.markdown('<div class="gr-line">Guardrail: nízka relevancia — odpoveď odmietnutá</div>',
                             unsafe_allow_html=True)
             elif m.get("sources"):
-                # аккордеон с цитатой первого/ключевого источника
                 with st.expander(f"Zdroj ({len(m['sources'])})"):
                     for s in m["sources"]:
                         st.markdown(f'<div class="src-src">• {s}</div>', unsafe_allow_html=True)
@@ -378,10 +378,63 @@ for m in st.session_state.messages:
                         st.markdown(f'<div class="src-meta">{doc0.source} · fragment</div>',
                                     unsafe_allow_html=True)
 
+# ---------- Чат: стрим ответа на новый вопрос ----------
+if st.session_state.pending_question:
+    q = st.session_state.pending_question
+    st.session_state.pending_question = None  # снимаем, чтобы не зациклиться
+
+    with st.chat_message("assistant", avatar=avatar_for("assistant")):
+        buf = st.empty()
+        # thinking-индикатор (анимированные точки)
+        buf.markdown('<div class="thinking">⋯</div>', unsafe_allow_html=True)
+
+        stream_gen = pipe.query_stream(q)
+        acc = ""
+        meta = None
+        for item in stream_gen:
+            if isinstance(item, dict):
+                meta = item
+                break
+            acc += item
+            buf.markdown(acc)
+
+        if meta is None:
+            meta = {"guardrail": False, "sources": [], "ok": True}
+
+        final_answer = meta.get("answer") or acc
+        buf.markdown(final_answer)
+
+        # метаданные под ответом
+        if meta.get("guardrail"):
+            st.markdown('<div class="gr-line">Guardrail: nízka relevancia — odpoveď odmietnutá</div>',
+                        unsafe_allow_html=True)
+        elif meta.get("sources"):
+            with st.expander(f"Zdroj ({len(meta['sources'])})"):
+                for s in meta["sources"]:
+                    st.markdown(f'<div class="src-src">• {s}</div>', unsafe_allow_html=True)
+                if meta.get("docs"):
+                    doc0 = meta["docs"][0]
+                    quote = (doc0.text or "")[:220]
+                    st.markdown(f'<div class="src-quote">"{quote}…"</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="src-meta">{doc0.source} · fragment</div>',
+                                unsafe_allow_html=True)
+
+    # сохраняем в историю, не вызываем rerun — всё уже отрендерено
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": final_answer,
+        "guardrail": bool(meta.get("guardrail")),
+        "sources": meta.get("sources") or [],
+        "docs": meta.get("docs") or [],
+        "ok": meta.get("ok", True),
+    })
+
 # ---------- Чат: ввод ----------
 prompt = st.chat_input("Napíšte otázku k technickej dokumentácii...")
 if prompt:
-    ask(prompt)
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.pending_question = prompt
+    st.rerun()
 
 # ---------- Чат: сброс ----------
 if st.session_state.messages:
