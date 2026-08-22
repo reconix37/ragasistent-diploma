@@ -346,10 +346,12 @@ st.sidebar.markdown('<div class="sb-sep"></div>', unsafe_allow_html=True)
 
 # ---------- Подсказки ----------
 examples = [
-    "Aká je maximálna teplota reflow?",
-    "Akou hrúbkou sa nanáša spájkovacia pasta?",
-    "Čo robí osadzovací stroj?",
-    "Ktorý zamestnanec dostal najvyšší plat?",  # демо: должен ответить «Neviem»
+    "Aká je maximálna teplota reflow?",                    # manuál-smt-montáž → 245 °C
+    "Aká je presnosť osadzovacieho stroja?",               # proces-osadzovanie-smt → ±0,05 mm
+    "Aké sú skladovacie podmienky spájkovacej pasty?",     # sklad-parametre → 2–10 °C, 24 h
+    "Po koľkých doskách sa čistí dno šablóny?",            # pracovny-pokyn-tlac → po 25
+    "Aký je interval generálnej údržby stroja?",           # pokyn-udrzba-strojov → 5000 h
+    "Ktorý zamestnanec dostal najvyšší plat?",             # off-topic → guardrail «Neviem»
 ]
 
 st.sidebar.markdown('<div class="sb-label">Skúste sa opýtať</div>', unsafe_allow_html=True)
