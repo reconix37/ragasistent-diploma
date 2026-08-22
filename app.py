@@ -169,28 +169,24 @@ CSS_DARK = """
 }
 
 html, body, [data-testid="stAppViewContainer"] {
-  background: var(--bg); color: var(--text);
+  background: var(--bg) !important; color: var(--text) !important;
   font-family: 'Space Grotesk', system-ui, sans-serif;
 }
 [data-testid="stHeader"] { background: transparent; }
 .block-container { padding-top: 1.1rem; padding-bottom: 3rem; max-width: 760px; }
-
-h1,h2,h3,h4 { color: var(--text-soft); letter-spacing: -0.01em; }
+h1,h2,h3,h4 { color: var(--text-soft); letter-spacing:-0.01em; }
 a { color: var(--accent); }
-
-.hd-mark { font-size: 1.6rem; font-weight: 700; color: var(--text); letter-spacing:-0.02em; margin:0; }
-.hd-sub { color: var(--muted); font-size:.92rem; margin-top:-.15rem; }
+.hd-mark { font-size:1.6rem; font-weight:700; color:var(--text); letter-spacing:-0.02em; margin:0; }
+.hd-sub { color:var(--muted); font-size:.92rem; margin-top:-.15rem; }
 .hd-div { height:3px; width:52px; border-radius:3px; margin:.5rem 0 1.1rem 0;
   background:linear-gradient(90deg, var(--accent-2), var(--accent-3)); }
-
 .chip { display:inline-flex; align-items:center; gap:.45rem; font-family:'JetBrains Mono',monospace;
   font-size:.76rem; padding:.3rem .7rem; border-radius:8px; border:1px solid var(--border);
   background:var(--surface); color:var(--text-soft); }
 .chip-dot { width:7px;height:7px;border-radius:50%; }
 .chip-on .chip-dot { background:var(--good); }
 .chip-off .chip-dot { background:var(--warn); }
-
-[data-testid="stSidebar"] { background:var(--surface); border-right:1px solid var(--border); }
+[data-testid="stSidebar"] { background:var(--surface) !important; border-right:1px solid var(--border); }
 [data-testid="stSidebar"] * { color:var(--text-soft); }
 .sb-title { font-weight:700; font-size:.98rem; color:var(--text); letter-spacing:-.01em; }
 .sb-meta { font-family:'JetBrains Mono',monospace; font-size:.7rem; color:var(--muted); line-height:1.6; }
@@ -224,7 +220,7 @@ div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
 
 .gr-line { margin-top:.5rem; font-size:.84rem; color:var(--warn); font-weight:500; }
 
-[data-testid="stChatInput"] { border:1px solid var(--border-2); border-radius:10px; background:var(--surface); }
+[data-testid="stChatInput"] { border:1px solid var(--border-2); border-radius:10px; background:var(--surface) !important; }
 [data-testid="stChatInput"]:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(141,183,196,.15); }
 [data-testid="stChatInput"] input { color:var(--text); }
 [data-testid="stChatInput"] input::placeholder { color:var(--faint); }
@@ -237,9 +233,12 @@ div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
 st.set_page_config(page_title="RAG Asistent — Technická dokumentácia",
                    page_icon="⚙︎", layout="centered")
 
-# тема — по умолчанию светлая, переключается в сайдбаре
+# тема читается ДО инжекта CSS — нужный блок всегда идёт последним
 if "theme" not in st.session_state:
     st.session_state.theme = "light"
+_dark_request = st.sidebar.toggle("Tmavá téma",
+                                  value=(st.session_state.theme == "dark"))
+st.session_state.theme = "dark" if _dark_request else "light"
 
 CSS = CSS_DARK if st.session_state.theme == "dark" else CSS_LIGHT
 st.markdown(CSS, unsafe_allow_html=True)
@@ -324,12 +323,6 @@ else:
     st.sidebar.markdown(
         '<span class="chip chip-off"><span class="chip-dot"></span>AI odpovede: OFF</span>',
         unsafe_allow_html=True)
-
-st.sidebar.markdown('<div class="sb-sep"></div>', unsafe_allow_html=True)
-
-# переключатель темы
-dark = st.sidebar.toggle("Tmavá téma", value=(st.session_state.theme == "dark"))
-st.session_state.theme = "dark" if dark else "light"
 
 st.sidebar.markdown('<div class="sb-sep"></div>', unsafe_allow_html=True)
 
