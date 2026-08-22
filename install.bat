@@ -13,21 +13,30 @@ echo (progress is written to install_log.txt)
 echo.
 
 rem ---- find a good Python (3.12 first, then 3.11) ----
+rem Note: the py launcher might be missing, so we try several names.
 set "PYCMD="
-py -3.12 -c "import sys" >nul 2>&1 && set "PYCMD=py -3.12"
-if not defined PYCMD py -3.11 -c "import sys" >nul 2>&1 && set "PYCMD=py -3.11"
-if not defined PYCMD python -c "import sys; v=sys.version_info; raise SystemExit(0 if (v>=(3,10) and v<(3,14)) else 1)" >nul 2>&1 && set "PYCMD=python"
 
-if not defined PYCMD (
-    echo.
-    echo [!] No suitable Python found.
-    echo     This needs Python 3.11 or 3.12 (3.14 is too new - no numpy wheels).
-    echo     Download Python 3.12 from:  https://www.python.org/downloads/
-    echo     Tick "Add python.exe to PATH" during install.
-    echo.
-    pause
-    exit /b 1
-)
+set "PYC=py -3.12"
+%PYC% -c "import sys" >nul 2>&1
+if not errorlevel 1 goto :pyfound
+set "PYC=py -3.11"
+%PYC% -c "import sys" >nul 2>&1
+if not errorlevel 1 goto :pyfound
+set "PYC=python"
+%PYC% -c "import sys; v=sys.version_info; raise SystemExit(0 if (v>=(3,10) and v<(3,14)) else 1)" >nul 2>&1
+if not errorlevel 1 goto :pyfound
+
+echo.
+echo [!] No suitable Python found.
+echo     This needs Python 3.11 or 3.12 (3.14 is too new - no numpy wheels).
+echo     Download Python 3.12 from:  https://www.python.org/downloads/
+echo     Tick "Add python.exe to PATH" during install.
+echo.
+pause
+exit /b 1
+
+:pyfound
+set "PYCMD=%PYC%"
 
 echo Using: %PYCMD%
 echo Using: %PYCMD%>> "%LOGFILE%"
