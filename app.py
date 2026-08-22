@@ -37,6 +37,25 @@ def _load_dotenv(path: str = os.path.join(os.path.dirname(__file__), ".env")):
 
 _load_dotenv()
 
+# ---------- Аватары (SVG-круги с буквой, без эмодзи-слопа) ----------
+def _svg_avatar(letter: str, bg: str, fg: str, size: int = 200) -> str:
+    """Буква в цветном круге -> data-URI для st.chat_message(avatar=...)."""
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+           f'viewBox="0 0 {size} {size}"><circle cx="{size/2}" cy="{size/2}" '
+           f'r="{size/2}" fill="{bg}"/><text x="{size/2}" y="{size/2}" '
+           f'font-family="Space Grotesk, sans-serif" font-size="{size*0.55}" '
+           f'font-weight="600" fill="{fg}" text-anchor="middle" '
+           f'dominant-baseline="central">{letter}</text></svg>')
+    from urllib.parse import quote
+    return "data:image/svg+xml," + quote(svg)
+
+
+def avatar_for(role: str) -> str:
+    """Аватар зависит от темы (контрастная буква на акцентном фоне)."""
+    if role == "assistant":
+        return _svg_avatar("A", "#2f6f7d", "#ffffff")
+    return _svg_avatar("R", "#6a4f8a", "#ffffff")
+
 # ---------- ДИЗАЙН-СИСТЕМА (Rosé Pine) -----------------------------------
 CSS_LIGHT = """
 <style>
@@ -281,7 +300,7 @@ def ask(question: str):
     st.session_state.messages.append({"role": "user", "content": question})
 
     # placeholder для стрима
-    with st.chat_message("assistant", avatar="A"):
+    with st.chat_message("assistant", avatar=avatar_for("assistant")):
         buf = st.empty()
         stream_gen = pipe.query_stream(question)
         acc = ""
@@ -341,7 +360,7 @@ for ex in examples:
 
 # ---------- Чат: рендер истории ----------
 for m in st.session_state.messages:
-    with st.chat_message(m["role"], avatar=("A" if m["role"] == "assistant" else "R")):
+    with st.chat_message(m["role"], avatar=avatar_for(m["role"])):
         st.markdown(m["content"])
         if m["role"] == "assistant":
             if m.get("guardrail"):
