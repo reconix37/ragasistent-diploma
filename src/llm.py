@@ -61,12 +61,27 @@ class OpenRouterClient:
 
     def generate(self, prompt: str, temperature: float = 0.2,
                  max_tokens: int = 300) -> str:
-        """Один вызов LLM с ретраями по цепочке fallback."""
-        models = [self.model, *FALLBACK_MODELS]
+        """Один вызов LLM с ретраями по цепочке fallback (не-стриминг)."""
+        chunks = []
+        for ch in self.generate_stream(prompt, temperature=temperature,
+                                       max_tokens=max_tokens):
+            chunks.append(ch)
+        return "".join(chunks).strip()
+
+    def generate_stream(self, prompt: str, temperature: float = 0.2,
+                        max_tokens: int = 300):
+        """Стрим-генератор ответа. Не-стрим-обёртка собирает его в строку.
+
+        Первая модель — основная; если она упала до первого чанка,
+        пробуем fallback-цепочку. Чанки отдаём по мере прихода.
+        """
+        models = [self.model]
+        models.extend(FALLBACK_MODELS)
         last_err: Optional[str] = None
+
         for m in models:
             try:
-                resp = self.client.chat.completions.create(
+                stream = self.client.chat.completions.create(
                     model=m,
                     messages=[
                         {
@@ -80,8 +95,19 @@ class OpenRouterClient:
                     ],
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    stream=True,
                 )
-                return (resp.choices[0].message.content or "").strip()
+                emitted = False
+                for part in stream:
+                    delta = part.choices[0].delta.content if part.choices else None
+                    if delta:
+                        emitted = True
+                        yield delta
+                # дошли до конца и хоть что-то отдали => считаем успехом
+                if emitted:
+                    return
+                # пустой ответ от этой модели — пробуем следующую
+                last_err = "empty stream"
             except Exception as e:  # noqa: BLE001
                 last_err = f"{type(e).__name__}: {e}"
                 continue

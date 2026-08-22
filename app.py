@@ -3,10 +3,11 @@
 Streamlit UI для RAG-ассистента (демо для TESLA Stropkov).
 
 Запуск:  streamlit run app.py
-Чат: вопрос -> ответ + источник + метка guardrail.
+Чат: вопрос -> стрим-ответ -> источник (аккордеон с цитатой) + метка guardrail.
 Секреты берутся из файла .env в корне проекта (если есть) — см. .env.example.
 
-Оформление: Rosé Pine Dawn (base #faf4ed, surface #fffaf3), Space Grotesk + JetBrains Mono.
+Оформление: Rosé Pine (Dawn — светлая / Moon — тёмная), переключатель темы в сайдбаре.
+Шрифты: Space Grotesk (текст) + JetBrains Mono (метаданные).
 """
 from __future__ import annotations
 
@@ -36,121 +37,218 @@ def _load_dotenv(path: str = os.path.join(os.path.dirname(__file__), ".env")):
 
 _load_dotenv()
 
-# ---------- ДИЗАЙН-СИСТЕМА (Rosé Pine Dawn) -------------------------------
-CSS = """
+# ---------- ДИЗАЙН-СИСТЕМА (Rosé Pine) -----------------------------------
+CSS_LIGHT = """
 <style>
-/* ===== fonts ===== */
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --rp-base:  #faf4ed;
-  --rp-surface:#fffaf3;
-  --rp-overlay:#f2e9de;
-  --rp-muted: #9893a5;
-  --rp-subtle:#797593;
-  --rp-text: #575279;
-  --rp-love: #b4637a;
-  --rp-gold: #ea9d34;
-  --rp-rose: #d7827e;
-  --rp-pine: #286983;
-  --rp-foam: #56949f;
-  --rp-iris: #907aa9;
-  --rp-hl-low: #f4ede8;
-  --rp-hl-med:#dfdad9;
-  --rp-hl-high:#cecacd;
+  --bg:        #f2ece4;
+  --surface:   #fffaf3;
+  --surface-2: #f6f0e8;
+  --border:    #d9d2c7;
+  --border-2:  #c9c1b5;
+  --text:      #44415a;
+  --text-soft: #575279;
+  --muted:     #7b7690;
+  --faint:     #a29bb3;
+  --accent:    #2f6f7d;
+  --accent-2:  #56949f;
+  --accent-3:  #6a4f8a;
+  --good:      #286983;
+  --warn:      #b26a3d;
+  --bad:       #8a3f4f;
+  --code-bg:   #f6f0e8;
 }
 
-/* ===== base ===== */
 html, body, [data-testid="stAppViewContainer"] {
-  background: var(--rp-base);
-  color: var(--rp-text);
+  background: var(--bg); color: var(--text);
   font-family: 'Space Grotesk', system-ui, sans-serif;
 }
 [data-testid="stHeader"] { background: transparent; }
-.block-container { padding-top: 1.2rem; padding-bottom: 3rem; max-width: 780px; }
+.block-container { padding-top: 1.1rem; padding-bottom: 3rem; max-width: 760px; }
 
-/* ===== typography ===== */
-h1, h2, h3 { color: var(--rp-text); font-weight: 600; letter-spacing: -0.01em; }
+h1,h2,h3,h4 { color: var(--text-soft); letter-spacing: -0.01em; }
+a { color: var(--accent); }
 
-/* ===== header ===== */
-.header-mark { font-size: 1.75rem; font-weight: 700; color: var(--rp-text);
+/* ---- header ---- */
+.hd-mark { font-size: 1.6rem; font-weight: 700; color: var(--text);
   letter-spacing: -0.02em; margin: 0; }
-.header-sub { color: var(--rp-muted); font-size: 0.95rem; margin-top: -0.2rem; }
-.header-divider { height: 3px; width: 56px; border-radius: 2px;
-  background: linear-gradient(90deg, var(--rp-foam), var(--rp-iris));
-  margin: 0.45rem 0 1.15rem 0; }
+.hd-sub { color: var(--muted); font-size: 0.92rem; margin-top: -0.15rem; }
+.hd-div { height: 3px; width: 52px; border-radius: 3px; margin: 0.5rem 0 1.1rem 0;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent-3)); }
 
-/* ===== status chip ===== */
-.chip { display: inline-flex; align-items: center; gap: 0.45rem;
-  font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
-  padding: 0.32rem 0.75rem; border-radius: 999px;
-  border: 1px solid var(--rp-hl-high); background: var(--rp-surface); color: var(--rp-text); }
-.chip-dot { width: 8px; height: 8px; border-radius: 50%; }
-.chip-on .chip-dot { background: var(--rp-pine); box-shadow: 0 0 0 3px rgba(40,105,131,.15); }
-.chip-off .chip-dot { background: var(--rp-gold); box-shadow: 0 0 0 3px rgba(234,157,52,.18); }
+/* ---- chip (status) ---- */
+.chip { display:inline-flex; align-items:center; gap:.45rem;
+  font-family:'JetBrains Mono',monospace; font-size:.76rem;
+  padding:.3rem .7rem; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--text-soft); }
+.chip-dot { width:7px;height:7px;border-radius:50%; }
+.chip-on .chip-dot { background:var(--good); }
+.chip-off .chip-dot { background:var(--warn); }
+.chip-no { background:var(--surface-2); color:var(--muted); }
 
-/* ===== sidebar ===== */
-[data-testid="stSidebar"] { background: var(--rp-surface);
-  border-right: 1px solid var(--rp-hl-med); }
-[data-testid="stSidebar"] * { color: var(--rp-text); }
-.sb-title { font-weight: 700; font-size: 1.02rem; color: var(--rp-text);
-  letter-spacing: -0.01em; margin-bottom: 0.1rem; }
-.sb-meta { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
-  color: var(--rp-muted); line-height: 1.55; }
-.sb-sep { border-top: 1px solid var(--rp-hl-med); margin: 0.9rem 0; }
-.sb-label { font-size: 0.72rem; font-weight: 600; color: var(--rp-subtle);
-  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
+/* ---- sidebar ---- */
+[data-testid="stSidebar"] { background:var(--surface); border-right:1px solid var(--border); }
+[data-testid="stSidebar"] * { color:var(--text-soft); }
+.sb-title { font-weight:700; font-size:.98rem; color:var(--text); letter-spacing:-.01em; }
+.sb-meta { font-family:'JetBrains Mono',monospace; font-size:.7rem; color:var(--muted); line-height:1.6; }
+.sb-sep { border-top:1px solid var(--border); margin:.85rem 0; }
+.sb-label { font-size:.7rem; font-weight:600; color:var(--faint);
+  text-transform:uppercase; letter-spacing:.07em; margin-bottom:.45rem; }
 
 /* buttons */
-[data-testid="stSidebar"] .stButton > button, .stButton > button {
-  background: var(--rp-surface); border: 1px solid var(--rp-hl-high);
-  color: var(--rp-text); border-radius: 10px;
-  font-family: 'Space Grotesk', sans-serif; font-weight: 500;
-  padding: 0.45rem 1rem; transition: all .15s ease; }
-[data-testid="stSidebar"] .stButton > button:hover, .stButton > button:hover {
-  border-color: var(--rp-foam); background: var(--rp-hl-low); color: var(--rp-pine); }
-[data-testid="stSidebar"] .stButton > button:active, .stButton > button:active { transform: translateY(1px); }
+[data-testid="stSidebar"] .stButton>button, .stButton>button {
+  background:var(--surface); border:1px solid var(--border); color:var(--text-soft);
+  border-radius:8px; font-family:'Space Grotesk',sans-serif; font-weight:500;
+  padding:.42rem .9rem; transition:all .14s ease; }
+[data-testid="stSidebar"] .stButton>button:hover, .stButton>button:hover {
+  border-color:var(--accent); background:var(--surface-2); color:var(--accent); }
+[data-testid="stSidebar"] .stButton>button:active, .stButton>button:active { transform:translateY(1px); }
 
-/* ===== chat bubbles ===== */
-[data-testid="stChatMessage"] { background: var(--rp-surface);
-  border: 1px solid var(--rp-hl-med); border-radius: 14px;
-  padding: 0.55rem 0.9rem; box-shadow: 0 1px 2px rgba(87,82,121,.05); }
-[data-testid="stChatMessage"] [data-testid="stChatMessageContent"] p { margin: 0.15rem 0; line-height: 1.6; }
+/* ---- chat bubbles (less round, stricter) ---- */
+[data-testid="stChatMessage"] {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:.5rem .85rem;
+  box-shadow:0 1px 2px rgba(0,0,0,.03); }
+[data-testid="stChatMessage"] [data-testid="stChatMessageContent"] p { margin:.15rem 0; line-height:1.6; color:var(--text); }
+/* user bubble — subtle accent border */
+div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+  background:var(--surface-2); border-color:var(--border-2); }
 
-/* source line */
-.src-line { margin-top: 0.6rem; padding-top: 0.5rem;
-  border-top: 1px dashed var(--rp-hl-med); }
-.src-tag { display: inline-block; font-family: 'JetBrains Mono', monospace;
-  font-size: 0.72rem; color: var(--rp-pine); background: rgba(40,105,131,.09);
-  border: 1px solid rgba(40,105,131,.22); padding: 0.12rem 0.5rem;
-  border-radius: 999px; margin: 0.15rem 0.2rem 0 0; }
+/* avatar circles (letter only, no emoji) */
+[data-testid="stChatMessageAvatarUser"], [data-testid="stChatMessageAvatarAssistant"] {
+  border-radius:50% !important; background:var(--accent) !important;
+  color:#fff !important; font-weight:600 !important;
+  font-family:'Space Grotesk',sans-serif; }
 
-/* guardrail note */
-.gr-line { margin-top: 0.5rem; font-size: 0.85rem; color: var(--rp-gold); font-weight: 500; }
+/* ---- source accordion ---- */
+[data-testid="stExpander"] { border:1px solid var(--border); border-radius:10px;
+  background:var(--surface-2); }
+[data-testid="stExpander"] details { background:transparent; }
+[data-testid="stExpander"] summary { background:var(--surface-2); border-radius:10px; color:var(--text-soft); }
+.src-meta { font-family:'JetBrains Mono',monospace; font-size:.72rem; color:var(--muted); margin-top:.1rem; }
+.src-quote { font-size:.85rem; color:var(--text-soft); border-left:2px solid var(--accent-2);
+  padding-left:.6rem; margin:.3rem 0 0 0; line-height:1.55; }
+.src-src { font-family:'JetBrains Mono',monospace; font-size:.74rem; color:var(--accent); margin-top:.35rem; }
 
-/* ===== chat input ===== */
-[data-testid="stChatInput"] { border: 1px solid var(--rp-hl-high); border-radius: 12px;
-  background: var(--rp-surface); }
-[data-testid="stChatInput"]:focus-within { border-color: var(--rp-foam);
-  box-shadow: 0 0 0 3px rgba(86,148,159,.15); }
-[data-testid="stChatInput"] input { color: var(--rp-text); }
-[data-testid="stChatInput"] input::placeholder { color: var(--rp-muted); }
+/* ---- guardrail / neviem ---- */
+.gr-line { margin-top:.5rem; font-size:.84rem; color:var(--warn); font-weight:500; }
 
-/* misc */
-a { color: var(--rp-foam); }
-.stCaption, [data-testid="stCaptionContainer"] { color: var(--rp-muted); }
+/* ---- chat input ---- */
+[data-testid="stChatInput"] { border:1px solid var(--border-2); border-radius:10px; background:var(--surface); }
+[data-testid="stChatInput"]:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(47,111,125,.13); }
+[data-testid="stChatInput"] input { color:var(--text); }
+[data-testid="stChatInput"] input::placeholder { color:var(--faint); }
+
+.stCaption, [data-testid="stCaptionContainer"] { color:var(--muted); }
 </style>
 """
 
+CSS_DARK = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --bg:        #15171a;
+  --surface:   #1c1f24;
+  --surface-2: #23272d;
+  --border:    #2d323a;
+  --border-2:  #3a4049;
+  --text:      #e6e1f0;
+  --text-soft: #c9c2da;
+  --muted:     #8f8aa0;
+  --faint:     #6a6578;
+  --accent:    #8db7c4;
+  --accent-2:  #76aab8;
+  --accent-3:  #ab9ac9;
+  --good:      #7bb7c9;
+  --warn:      #e0a46a;
+  --bad:       #e39baa;
+  --code-bg:   #23272d;
+}
+
+html, body, [data-testid="stAppViewContainer"] {
+  background: var(--bg); color: var(--text);
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+[data-testid="stHeader"] { background: transparent; }
+.block-container { padding-top: 1.1rem; padding-bottom: 3rem; max-width: 760px; }
+
+h1,h2,h3,h4 { color: var(--text-soft); letter-spacing: -0.01em; }
+a { color: var(--accent); }
+
+.hd-mark { font-size: 1.6rem; font-weight: 700; color: var(--text); letter-spacing:-0.02em; margin:0; }
+.hd-sub { color: var(--muted); font-size:.92rem; margin-top:-.15rem; }
+.hd-div { height:3px; width:52px; border-radius:3px; margin:.5rem 0 1.1rem 0;
+  background:linear-gradient(90deg, var(--accent-2), var(--accent-3)); }
+
+.chip { display:inline-flex; align-items:center; gap:.45rem; font-family:'JetBrains Mono',monospace;
+  font-size:.76rem; padding:.3rem .7rem; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--text-soft); }
+.chip-dot { width:7px;height:7px;border-radius:50%; }
+.chip-on .chip-dot { background:var(--good); }
+.chip-off .chip-dot { background:var(--warn); }
+
+[data-testid="stSidebar"] { background:var(--surface); border-right:1px solid var(--border); }
+[data-testid="stSidebar"] * { color:var(--text-soft); }
+.sb-title { font-weight:700; font-size:.98rem; color:var(--text); letter-spacing:-.01em; }
+.sb-meta { font-family:'JetBrains Mono',monospace; font-size:.7rem; color:var(--muted); line-height:1.6; }
+.sb-sep { border-top:1px solid var(--border); margin:.85rem 0; }
+.sb-label { font-size:.7rem; font-weight:600; color:var(--faint); text-transform:uppercase; letter-spacing:.07em; margin-bottom:.45rem; }
+
+[data-testid="stSidebar"] .stButton>button, .stButton>button {
+  background:var(--surface); border:1px solid var(--border); color:var(--text-soft);
+  border-radius:8px; font-family:'Space Grotesk',sans-serif; font-weight:500;
+  padding:.42rem .9rem; transition:all .14s ease; }
+[data-testid="stSidebar"] .stButton>button:hover, .stButton>button:hover {
+  border-color:var(--accent); background:var(--surface-2); color:var(--accent); }
+[data-testid="stSidebar"] .stButton>button:active, .stButton>button:active { transform:translateY(1px); }
+
+[data-testid="stChatMessage"] {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:.5rem .85rem; box-shadow:0 1px 2px rgba(0,0,0,.2); }
+[data-testid="stChatMessage"] [data-testid="stChatMessageContent"] p { margin:.15rem 0; line-height:1.6; color:var(--text); }
+div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+  background:var(--surface-2); border-color:var(--border-2); }
+
+[data-testid="stChatMessageAvatarUser"], [data-testid="stChatMessageAvatarAssistant"] {
+  border-radius:50% !important; background:var(--accent) !important;
+  color:var(--bg) !important; font-weight:600 !important; font-family:'Space Grotesk',sans-serif; }
+
+[data-testid="stExpander"] { border:1px solid var(--border); border-radius:10px; background:var(--surface-2); }
+[data-testid="stExpander"] summary { background:var(--surface-2); border-radius:10px; color:var(--text-soft); }
+.src-meta { font-family:'JetBrains Mono',monospace; font-size:.72rem; color:var(--muted); margin-top:.1rem; }
+.src-quote { font-size:.85rem; color:var(--text-soft); border-left:2px solid var(--accent-2); padding-left:.6rem; margin:.3rem 0 0 0; line-height:1.55; }
+.src-src { font-family:'JetBrains Mono',monospace; font-size:.74rem; color:var(--accent); margin-top:.35rem; }
+
+.gr-line { margin-top:.5rem; font-size:.84rem; color:var(--warn); font-weight:500; }
+
+[data-testid="stChatInput"] { border:1px solid var(--border-2); border-radius:10px; background:var(--surface); }
+[data-testid="stChatInput"]:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(141,183,196,.15); }
+[data-testid="stChatInput"] input { color:var(--text); }
+[data-testid="stChatInput"] input::placeholder { color:var(--faint); }
+
+.stCaption, [data-testid="stCaptionContainer"] { color:var(--muted); }
+</style>
+"""
+
+# ---------- Конфиг ----------
 st.set_page_config(page_title="RAG Asistent — Technická dokumentácia",
-                   page_icon="🔧", layout="centered")
+                   page_icon="⚙︎", layout="centered")
+
+# тема — по умолчанию светлая, переключается в сайдбаре
+if "theme" not in st.session_state:
+    st.session_state.theme = "light"
+
+CSS = CSS_DARK if st.session_state.theme == "dark" else CSS_LIGHT
 st.markdown(CSS, unsafe_allow_html=True)
 
 # ---------- Шапка ----------
-st.markdown('<p class="header-mark">🔧 RAG Asistent</p>', unsafe_allow_html=True)
-st.markdown('<p class="header-sub">Asistent pre technickú dokumentáciu — RAG + guardrails + hybrid search</p>',
+st.markdown('<p class="hd-mark">RAG Asistent</p>', unsafe_allow_html=True)
+st.markdown('<p class="hd-sub">Asistent pre technickú dokumentáciu — hybrid search + guardrails</p>',
             unsafe_allow_html=True)
-st.markdown('<div class="header-divider"></div>', unsafe_allow_html=True)
+st.markdown('<div class="hd-div"></div>', unsafe_allow_html=True)
 
 # ---------- Инициализация (кэш) ----------
 @st.cache_resource(show_spinner=False)
@@ -180,19 +278,34 @@ if "messages" not in st.session_state:
 
 
 def ask(question: str):
-    """Прогон вопроса через пайплайн и запись в историю чата."""
+    """Прогон вопроса стримом, рендер чанков, в конце — метаданные."""
     st.session_state.messages.append({"role": "user", "content": question})
-    res = pipe.query(question)
-    guardrail = bool(res.get("guardrail"))
-    answer = res["answer"]
-    sources = res.get("sources") or []
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": answer,
-        "guardrail": guardrail,
-        "sources": sources,
-        "ok": res.get("ok"),
-    })
+
+    # placeholder для стрима
+    with st.chat_message("assistant", avatar="A"):
+        buf = st.empty()
+        stream_gen = pipe.query_stream(question)
+        acc = ""
+        meta = None
+        for item in stream_gen:
+            if isinstance(item, dict):
+                meta = item
+                break
+            acc += item
+            buf.markdown(acc)
+        if meta is None:
+            meta = {"guardrail": False, "sources": [], "ok": True}
+        # в историю идёт отформатированный ответ (без "Zdroj:" в тексте)
+        final_answer = meta.get("answer") or acc
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": final_answer,
+            "guardrail": bool(meta.get("guardrail")),
+            "sources": meta.get("sources") or [],
+            "docs": meta.get("docs") or [],
+            "ok": meta.get("ok", True),
+        })
+        st.rerun()
 
 
 # ---------- Сайдбар ----------
@@ -200,7 +313,7 @@ n_chunks = len(pipe.retriever.docs)
 st.sidebar.markdown('<div class="sb-sep"></div>', unsafe_allow_html=True)
 st.sidebar.markdown('<div class="sb-title">Index</div>', unsafe_allow_html=True)
 st.sidebar.markdown(
-    f'<div class="sb-meta">{n_chunks} častí<br>Hybrid search + BM25 + rerank<br>Guardrails: relevance threshold</div>',
+    f'<div class="sb-meta">{n_chunks} častí<br>Hybrid search + BM25 + rerank<br>Guardrails: relevance</div>',
     unsafe_allow_html=True)
 
 if llm_ok:
@@ -209,8 +322,14 @@ if llm_ok:
         unsafe_allow_html=True)
 else:
     st.sidebar.markdown(
-        '<span class="chip chip-off"><span class="chip-dot"></span>AI odpovede: OFF (search only)</span>',
+        '<span class="chip chip-off"><span class="chip-dot"></span>AI odpovede: OFF</span>',
         unsafe_allow_html=True)
+
+st.sidebar.markdown('<div class="sb-sep"></div>', unsafe_allow_html=True)
+
+# переключатель темы
+dark = st.sidebar.toggle("Tmavá téma", value=(st.session_state.theme == "dark"))
+st.session_state.theme = "dark" if dark else "light"
 
 st.sidebar.markdown('<div class="sb-sep"></div>', unsafe_allow_html=True)
 
@@ -229,15 +348,23 @@ for ex in examples:
 
 # ---------- Чат: рендер истории ----------
 for m in st.session_state.messages:
-    with st.chat_message(m["role"]):
+    with st.chat_message(m["role"], avatar=("A" if m["role"] == "assistant" else "R")):
         st.markdown(m["content"])
         if m["role"] == "assistant":
             if m.get("guardrail"):
-                st.markdown('<div class="gr-line">🛡️ Guardrail: nízka relevancia — odpoveď odmietnutá.</div>',
+                st.markdown('<div class="gr-line">Guardrail: nízka relevancia — odpoveď odmietnutá</div>',
                             unsafe_allow_html=True)
             elif m.get("sources"):
-                tags = "".join(f'<span class="src-tag">📄 {s}</span>' for s in m["sources"])
-                st.markdown(f'<div class="src-line">Zdroj: {tags}</div>', unsafe_allow_html=True)
+                # аккордеон с цитатой первого/ключевого источника
+                with st.expander(f"Zdroj ({len(m['sources'])})"):
+                    for s in m["sources"]:
+                        st.markdown(f'<div class="src-src">• {s}</div>', unsafe_allow_html=True)
+                    if m.get("docs"):
+                        doc0 = m["docs"][0]
+                        quote = (doc0.text or "")[:220]
+                        st.markdown(f'<div class="src-quote">"{quote}…"</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="src-meta">{doc0.source} · fragment</div>',
+                                    unsafe_allow_html=True)
 
 # ---------- Чат: ввод ----------
 prompt = st.chat_input("Napíšte otázku k technickej dokumentácii...")
@@ -246,6 +373,6 @@ if prompt:
 
 # ---------- Чат: сброс ----------
 if st.session_state.messages:
-    if st.sidebar.button("🗑️ Vymazať chat", use_container_width=True):
+    if st.sidebar.button("Vymazať chat", use_container_width=True):
         st.session_state.messages = []
         st.rerun()

@@ -93,6 +93,67 @@ class RAGPipeline:
             "docs": docs,
         }
 
+    def query_stream(self, question: str, use_guardrail: bool = True):
+        """Стрим-версия query: выдаёт чанки ответа, затем словарь-метаданные.
+
+        Используется в UI для живого рендера (st.write_stream). Собирает
+        retrieval + guardrail так же, как query(), но LLM-часть — стримом.
+        """
+        r = self.retriever.retrieve(question, use_guardrail=use_guardrail)
+
+        # guardrail-отказ
+        if not r["ok"]:
+            if self.llm:
+                answer = self.llm.refusal_for(r.get("reason", "no_results"))
+            else:
+                answer = _neviem_manual()
+            yield answer
+            yield {
+                "answer": answer,
+                "ok": False,
+                "reason": r.get("reason", "no_results"),
+                "sources": [d.source for d in r.get("docs", [])],
+                "score": r.get("score", 0.0),
+                "guardrail": r.get("refuse", False) or r["reason"] == "low_relevance",
+            }
+            return
+
+        docs = r["docs"]
+
+        # нет LLM -> retrieval-only
+        if not self.llm:
+            answer = f"[{len(docs)} relevantných častí]"
+            yield answer
+            yield {
+                "answer": answer,
+                "ok": True,
+                "reason": "retrieval_only",
+                "sources": [d.source for d in docs],
+                "score": r["score"],
+                "guardrail": False,
+                "docs": docs,
+            }
+            return
+
+        # LLM-генерация стримом (без loop-контроля в стриме — ответ один,
+        # форматирование источников в UI). Пост-обработка форматом — в конце.
+        prompt = build_prompt(question, docs)
+        raw = ""
+        for chunk in self.llm.generate_stream(prompt):
+            raw += chunk
+            yield chunk
+
+        answer = format_answer(raw, docs)
+        yield {
+            "answer": answer,
+            "ok": True,
+            "reason": "ok",
+            "sources": [d.source for d in docs],
+            "score": r["score"],
+            "guardrail": False,
+            "docs": docs,
+        }
+
 
 def _neviem_manual() -> str:
     return ("Neviem, túto informáciu v poskytnutej dokumentácii nemám. "

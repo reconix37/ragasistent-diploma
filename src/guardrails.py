@@ -63,24 +63,27 @@ def build_prompt(question: str, docs: List, lang: str = "sk") -> str:
     instr = (
         "Odpovedzaj LEN podľa uvedeného kontextu. "
         "Ak odpoveď nie je v kontexte, povedz: "
-        '"Neviem, túto informáciu v dokumentácii nemám." '
-        "Na konci uveď zdroj v tvare: Zdroj: <názov dokumentu>."
+        '"Neviem, túto informáciu v dokumentácii nemám."'
     )
     return f"{instr}\n\nKontext:\n{context}\n\nOtázka: {question}\nOdpoveď:"
 
 
 def format_answer(raw: str, docs: List) -> str:
     """
-    Пост-обработка: принудительно добавляет источник, если LLM его не дал,
-    и отсекает болтовню «вне контекста».
+    Пост-обработка: чистит ответ, отсекает болтовню «вне контекста».
+    Источники НЕ дописываются в текст — их рендерит UI отдельным блоком
+    (аккордеон) из payload.sources.
     """
     text = (raw or "").strip()
     if is_empty_bad(text):
         return NEVIEM_ANSWER
-    # Отбрасываем ответ, который просто повторяет вопрос/не относится к делу
-    srcs = " | ".join(sorted({d.source for d in docs}))
-    if "zdroj" not in text.lower() and "Zdroj:" not in text:
-        text = f"{text}\n\nZdroj: {srcs}"
+    # отсекаем служебную строку "Zdroj: ...", которую LLM мог добавить сам
+    # (в UI источники показываются аккуратно в аккордеоне, не в тексте)
+    for marker in ("Zdroj:", "Zdroj :", "zdroj:"):
+        idx = text.rfind(marker)
+        if idx > 0:
+            text = text[:idx].rstrip()
+            break
     return text
 
 
