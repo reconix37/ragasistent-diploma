@@ -74,13 +74,15 @@ def _read_doc_text(source: str) -> str:
         return ""
 
 
-def _render_sources(sources: list, docs: list | None):
+def _render_sources(sources: list, docs: list | None, uid: str):
     """Аккордеон с кликабельными источниками: клик по доку → открыть превью
-    прямо на странице (session_state.open_doc)."""
+    прямо на странице (session_state.open_doc).  uid — уникальный префикс ключа
+    (индекс сообщения), чтобы одинаковые доки в разных ответах не давали
+    дубли ключей Streamlit."""
     if "open_doc" not in st.session_state:
         st.session_state.open_doc = None
     for src in sources:
-        key = f"src_{src}"
+        key = f"src_{uid}_{src}"
         if st.button(f"📄 {src}", key=key, use_container_width=True,
                      type="secondary"):
             if st.session_state.open_doc == src:
@@ -425,7 +427,7 @@ for ex in examples:
         st.rerun()
 
 # ---------- Чат: рендер истории ----------
-for m in st.session_state.messages:
+for idx, m in enumerate(st.session_state.messages):
     with st.chat_message(m["role"], avatar=avatar_for(m["role"])):
         st.markdown(m["content"])
         if m["role"] == "assistant":
@@ -434,7 +436,7 @@ for m in st.session_state.messages:
                             unsafe_allow_html=True)
             elif m.get("sources"):
                 with st.expander(f"Zdroj ({len(m['sources'])}):"):
-                    _render_sources(m["sources"], m.get("docs"))
+                    _render_sources(m["sources"], m.get("docs"), uid=f"h{idx}")
 
 # ---------- Чат: стрим ответа на новый вопрос ----------
 if st.session_state.pending_question:
@@ -468,7 +470,7 @@ if st.session_state.pending_question:
                         unsafe_allow_html=True)
         elif meta.get("sources"):
             with st.expander(f"Zdroj ({len(meta['sources'])}):"):
-                _render_sources(meta["sources"], meta.get("docs"))
+                _render_sources(meta["sources"], meta.get("docs"), uid="live")
 
     # сохраняем в историю, не вызываем rerun — всё уже отрендерено
     st.session_state.messages.append({
