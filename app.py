@@ -18,7 +18,8 @@ import streamlit as st
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from src.ingest import build_retriever
+from src.ingest import DEFAULT_DOC_DIR, build_retriever
+DOC_DIR = DEFAULT_DOC_DIR
 from src.llm import OpenRouterClient
 from src.pipeline import RAGPipeline
 
@@ -55,6 +56,44 @@ def avatar_for(role: str) -> str:
     if role == "assistant":
         return _svg_avatar("A", "#2f6f7d", "#ffffff")
     return _svg_avatar("R", "#6a4f8a", "#ffffff")
+
+
+def _read_doc_text(source: str) -> str:
+    """Читает исходный .md/.txt документ из docs/ по имени файла."""
+    for ext in (".md", ".txt"):
+        p = os.path.join(DOC_DIR, source)
+        if os.path.exists(p):
+            try:
+                return open(p, encoding="utf-8").read().strip()
+            except Exception:  # noqa: BLE001
+                return ""
+    # возможен путь с пробелами/без расширения в имени
+    try:
+        return open(os.path.join(DOC_DIR, source), encoding="utf-8").read().strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _render_sources(sources: list, docs: list | None):
+    """Аккордеон с кликабельными источниками: клик по доку → открыть превью
+    прямо на странице (session_state.open_doc)."""
+    if "open_doc" not in st.session_state:
+        st.session_state.open_doc = None
+    for src in sources:
+        key = f"src_{src}"
+        if st.button(f"📄 {src}", key=key, use_container_width=True,
+                     type="secondary"):
+            if st.session_state.open_doc == src:
+                st.session_state.open_doc = None
+            else:
+                st.session_state.open_doc = src
+            st.rerun()
+    if docs:
+        doc0 = docs[0]
+        quote = (doc0.text or "")[:220]
+        st.markdown(f'<div class="src-quote">"{quote}…"</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="src-meta">{doc0.source} · fragment</div>',
+                    unsafe_allow_html=True)
 
 # ---------- ДИЗАЙН-СИСТЕМА (Rosé Pine) -----------------------------------
 CSS_LIGHT = """
@@ -149,6 +188,10 @@ div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
 [data-testid="stExpander"] details { background:transparent; }
 [data-testid="stExpander"] summary { background:var(--surface-2); border-radius:10px; color:var(--text-soft); }
 .src-meta { font-family:'JetBrains Mono',monospace; font-size:.72rem; color:var(--muted); margin-top:.1rem; }
+.doc-title { font-weight:700; font-size:.98rem; color:var(--text); letter-spacing:-.01em; margin-bottom:.4rem; }
+.doc-preview { font-size:.9rem; color:var(--text-soft); line-height:1.6;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:10px;
+  padding:.9rem 1rem; max-height:320px; overflow-y:auto; white-space:pre-wrap; }
 .src-quote { font-size:.85rem; color:var(--text-soft); border-left:2px solid var(--accent-2);
   padding-left:.6rem; margin:.3rem 0 0 0; line-height:1.55; }
 .src-src { font-family:'JetBrains Mono',monospace; font-size:.74rem; color:var(--accent); margin-top:.35rem; }
@@ -250,6 +293,10 @@ div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
 [data-testid="stExpander"] { border:1px solid var(--border); border-radius:10px; background:var(--surface-2); }
 [data-testid="stExpander"] summary { background:var(--surface-2); border-radius:10px; color:var(--text-soft); }
 .src-meta { font-family:'JetBrains Mono',monospace; font-size:.72rem; color:var(--muted); margin-top:.1rem; }
+.doc-title { font-weight:700; font-size:.98rem; color:var(--text); letter-spacing:-.01em; margin-bottom:.4rem; }
+.doc-preview { font-size:.9rem; color:var(--text-soft); line-height:1.6;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:10px;
+  padding:.9rem 1rem; max-height:320px; overflow-y:auto; white-space:pre-wrap; }
 .src-quote { font-size:.85rem; color:var(--text-soft); border-left:2px solid var(--accent-2); padding-left:.6rem; margin:.3rem 0 0 0; line-height:1.55; }
 .src-src { font-family:'JetBrains Mono',monospace; font-size:.74rem; color:var(--accent); margin-top:.35rem; }
 
@@ -346,6 +393,19 @@ else:
         unsafe_allow_html=True)
 
 st.sidebar.markdown('<div class="sb-sep"></div>', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="sb-label">Pridať dokument (.md / .txt)</div>',
+                    unsafe_allow_html=True)
+uploaded = st.sidebar.file_uploader("Nahrať dokument", type=["md", "txt"],
+                                    label_visibility="collapsed")
+if uploaded is not None and uploaded.name not in os.listdir(DOC_DIR):
+    with st.spinner("Idxujem..."):
+        safe_name = os.path.basename(uploaded.name).replace(" ", "_")
+        dest = os.path.join(DOC_DIR, safe_name)
+        with open(dest, "wb") as f:
+            f.write(uploaded.getbuffer())
+        # переиндексация: пересобираем ретривер (подхватит новый док со старыми)
+        st.session_state.pipe.retriever = build_retriever()
+        st.rerun()
 
 # ---------- Подсказки ----------
 examples = [
@@ -373,15 +433,8 @@ for m in st.session_state.messages:
                 st.markdown('<div class="gr-line">Guardrail: nízka relevancia — odpoveď odmietnutá</div>',
                             unsafe_allow_html=True)
             elif m.get("sources"):
-                with st.expander(f"Zdroj ({len(m['sources'])})"):
-                    for s in m["sources"]:
-                        st.markdown(f'<div class="src-src">• {s}</div>', unsafe_allow_html=True)
-                    if m.get("docs"):
-                        doc0 = m["docs"][0]
-                        quote = (doc0.text or "")[:220]
-                        st.markdown(f'<div class="src-quote">"{quote}…"</div>', unsafe_allow_html=True)
-                        st.markdown(f'<div class="src-meta">{doc0.source} · fragment</div>',
-                                    unsafe_allow_html=True)
+                with st.expander(f"Zdroj ({len(m['sources'])}):"):
+                    _render_sources(m["sources"], m.get("docs"))
 
 # ---------- Чат: стрим ответа на новый вопрос ----------
 if st.session_state.pending_question:
@@ -414,15 +467,8 @@ if st.session_state.pending_question:
             st.markdown('<div class="gr-line">Guardrail: nízka relevancia — odpoveď odmietnutá</div>',
                         unsafe_allow_html=True)
         elif meta.get("sources"):
-            with st.expander(f"Zdroj ({len(meta['sources'])})"):
-                for s in meta["sources"]:
-                    st.markdown(f'<div class="src-src">• {s}</div>', unsafe_allow_html=True)
-                if meta.get("docs"):
-                    doc0 = meta["docs"][0]
-                    quote = (doc0.text or "")[:220]
-                    st.markdown(f'<div class="src-quote">"{quote}…"</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="src-meta">{doc0.source} · fragment</div>',
-                                unsafe_allow_html=True)
+            with st.expander(f"Zdroj ({len(meta['sources'])}):"):
+                _render_sources(meta["sources"], meta.get("docs"))
 
     # сохраняем в историю, не вызываем rerun — всё уже отрендерено
     st.session_state.messages.append({
@@ -445,4 +491,18 @@ if prompt:
 if st.session_state.messages:
     if st.sidebar.button("Vymazať chat", use_container_width=True):
         st.session_state.messages = []
+        st.rerun()
+
+# ---------- Превью документа (по клику на источник) ----------
+open_doc = st.session_state.get("open_doc")
+if open_doc:
+    doc_text = _read_doc_text(open_doc)
+    st.markdown('<div class="hd-div"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="doc-title">📄 {open_doc}</div>',
+                unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="doc-preview">{doc_text}</div>',
+        unsafe_allow_html=True)
+    if st.button("Zavrieť dokument", use_container_width=False):
+        st.session_state.open_doc = None
         st.rerun()
