@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import sys
+import json
 
 import streamlit as st
 
@@ -22,6 +23,52 @@ from src.ingest import DEFAULT_DOC_DIR, build_retriever
 DOC_DIR = DEFAULT_DOC_DIR
 from src.llm import OpenRouterClient
 from src.pipeline import RAGPipeline
+
+# ---- персистентное состояние (история чата + тема) ----------------------
+STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chat_state.json")
+
+
+def _load_state() -> dict:
+    """Читает ранее сохранённое состояние (история чата, тема) с диска."""
+    try:
+        with open(STATE_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:  # noqa: BLE001 — файла нет/битый → чистый старт
+        return {}
+
+
+def _save_state(data: dict):
+    """Пишет состояние на диск, чтобы пережить перезапуск скрипта."""
+    try:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _quote_of(meta: dict) -> str:
+    """Вытаскивает цитату из первого документа, если он есть."""
+    docs = meta.get("docs") or meta.get("doc_texts") or []
+    if docs:
+        t = getattr(docs[0], "text", None) or docs[0]
+        return str(t)[:220]
+    return ""
+
+
+def _persist():
+    """Сохраняет на диск историю чата + тему (сериализуемые поля)."""
+    payload = {
+        "theme": st.session_state.theme,
+        "messages": [
+            {
+                k: m[k]
+                for k in ("role", "content", "guardrail", "sources", "quote")
+                if k in m
+            }
+            for m in st.session_state.messages
+        ],
+    }
+    _save_state(payload)
 
 # ---- мягкий подхват .env (если лежит рядом) -----------------------------
 def _load_dotenv(path: str = os.path.join(os.path.dirname(__file__), ".env")):
@@ -74,11 +121,11 @@ def _read_doc_text(source: str) -> str:
         return ""
 
 
-def _render_sources(sources: list, docs: list | None, uid: str):
+def _render_sources(sources: list, quote: str = "", uid: str = ""):
     """Аккордеон с кликабельными источниками: клик по доку → открыть превью
     прямо на странице (session_state.open_doc).  uid — уникальный префикс ключа
     (индекс сообщения), чтобы одинаковые доки в разных ответах не давали
-    дубли ключей Streamlit."""
+    дубли ключей Streamlit.  quote — выдержка из источника (строка)."""
     if "open_doc" not in st.session_state:
         st.session_state.open_doc = None
     for src in sources:
@@ -90,11 +137,9 @@ def _render_sources(sources: list, docs: list | None, uid: str):
             else:
                 st.session_state.open_doc = src
             st.rerun()
-    if docs:
-        doc0 = docs[0]
-        quote = (doc0.text or "")[:220]
+    if quote:
         st.markdown(f'<div class="src-quote">"{quote}…"</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="src-meta">{doc0.source} · fragment</div>',
+        st.markdown(f'<div class="src-meta">· fragment</div>',
                     unsafe_allow_html=True)
 
 # ---------- ДИЗАЙН-СИСТЕМА (Rosé Pine) -----------------------------------
@@ -331,11 +376,14 @@ st.set_page_config(page_title="RAG Asistent — Technická dokumentácia",
                    page_icon="⚙︎", layout="centered")
 
 # тема читается ДО инжекта CSS — нужный блок всегда идёт последним
+_saved = _load_state()
 if "theme" not in st.session_state:
-    st.session_state.theme = "light"
+    st.session_state.theme = _saved.get("theme", "light")
 _dark_request = st.sidebar.toggle("Tmavá téma",
                                   value=(st.session_state.theme == "dark"))
 st.session_state.theme = "dark" if _dark_request else "light"
+_save_state({"theme": st.session_state.theme,
+             "messages": _saved.get("messages", [])})
 
 CSS = CSS_DARK if st.session_state.theme == "dark" else CSS_LIGHT
 st.markdown(CSS, unsafe_allow_html=True)
@@ -370,7 +418,7 @@ llm_ok = pipe.llm is not None
 
 # ---------- Логика чата ----------
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages = _saved.get("messages", [])
 
 # pending_question: вопрос ожидает ответа (стрим идёт после рендера истории)
 if "pending_question" not in st.session_state:
@@ -409,6 +457,18 @@ if uploaded is not None and uploaded.name not in os.listdir(DOC_DIR):
         st.session_state.pipe.retriever = build_retriever()
         st.rerun()
 
+# список загруженных в индексе документов (переживает перезапуск — лежат в docs/)
+st.sidebar.markdown('<div class="sb-sep"></div>', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="sb-title">Nahrané dokumenty</div>',
+                    unsafe_allow_html=True)
+_docs_now = sorted(os.listdir(DOC_DIR))
+if _docs_now:
+    st.sidebar.markdown(
+        '<div class="sb-meta">' + "<br>".join(f"• {d}" for d in _docs_now) + "</div>",
+        unsafe_allow_html=True)
+else:
+    st.sidebar.markdown('<div class="sb-meta">(prázdne)</div>', unsafe_allow_html=True)
+
 # ---------- Подсказки ----------
 examples = [
     "Aká je maximálna teplota reflow?",                    # manuál-smt-montáž → 245 °C
@@ -436,7 +496,7 @@ for idx, m in enumerate(st.session_state.messages):
                             unsafe_allow_html=True)
             elif m.get("sources"):
                 with st.expander(f"Zdroj ({len(m['sources'])}):"):
-                    _render_sources(m["sources"], m.get("docs"), uid=f"h{idx}")
+                    _render_sources(m["sources"], m.get("quote", ""), uid=f"h{idx}")
 
 # ---------- Чат: стрим ответа на новый вопрос ----------
 if st.session_state.pending_question:
@@ -470,7 +530,7 @@ if st.session_state.pending_question:
                         unsafe_allow_html=True)
         elif meta.get("sources"):
             with st.expander(f"Zdroj ({len(meta['sources'])}):"):
-                _render_sources(meta["sources"], meta.get("docs"), uid="live")
+                _render_sources(meta["sources"], _quote_of(meta), uid="live")
 
     # сохраняем в историю, не вызываем rerun — всё уже отрендерено
     st.session_state.messages.append({
@@ -478,14 +538,16 @@ if st.session_state.pending_question:
         "content": final_answer,
         "guardrail": bool(meta.get("guardrail")),
         "sources": meta.get("sources") or [],
-        "docs": meta.get("docs") or [],
+        "quote": _quote_of(meta),
         "ok": meta.get("ok", True),
     })
+    _persist()
 
 # ---------- Чат: ввод ----------
 prompt = st.chat_input("Napíšte otázku k technickej dokumentácii...")
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
+    _persist()
     st.session_state.pending_question = prompt
     st.rerun()
 
@@ -493,6 +555,7 @@ if prompt:
 if st.session_state.messages:
     if st.sidebar.button("Vymazať chat", use_container_width=True):
         st.session_state.messages = []
+        _persist()
         st.rerun()
 
 # ---------- Превью документа (по клику на источник) ----------

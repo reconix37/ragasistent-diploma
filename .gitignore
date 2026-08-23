@@ -4,6 +4,7 @@
 venv/
 __pycache__/
 *.pyc
+chat_state.json
 
 # модели скачиваются в кэш HF, индексы пересобираются — не храним
 .chromadb/
