@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from .guardrails import build_prompt, format_answer, is_empty_bad, loop_filter
+from .guardrails import build_prompt, format_answer, is_empty_bad, is_refusal, loop_filter
 from .llm import OpenRouterClient
 from .retrieval import HybridRetriever
 
@@ -144,13 +144,16 @@ class RAGPipeline:
             yield chunk
 
         answer = format_answer(raw, docs)
+        # LLM могла сама отказаться («Neviem…») — тогда это тоже guardrail-отказ:
+        # прячем источники и показываем оранжевую строку в UI.
+        refused = is_refusal(answer)
         yield {
             "answer": answer,
             "ok": True,
-            "reason": "ok",
-            "sources": [d.source for d in docs],
+            "reason": "refused" if refused else "ok",
+            "sources": [] if refused else [d.source for d in docs],
             "score": r["score"],
-            "guardrail": False,
+            "guardrail": refused,
             "docs": docs,
         }
 
