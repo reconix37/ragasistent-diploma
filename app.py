@@ -129,8 +129,10 @@ a { color: var(--accent); }
 [data-testid="stChatMessage"] {
   background:var(--surface); border:1px solid var(--border);
   border-radius:10px; padding:.5rem .85rem;
-  box-shadow:0 1px 2px rgba(0,0,0,.03); }
+  box-shadow:0 1px 2px rgba(0,0,0,.03);
+  height:auto !important; min-height:0; overflow:visible; }
 [data-testid="stChatMessage"] [data-testid="stChatMessageContent"] p { margin:.15rem 0; line-height:1.6; color:var(--text); }
+[data-testid="stChatMessageContent"] { overflow-wrap:break-word; overflow:visible; }
 /* user bubble — subtle accent border */
 div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
   background:var(--surface-2); border-color:var(--border-2); }
@@ -152,7 +154,8 @@ div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
 .src-src { font-family:'JetBrains Mono',monospace; font-size:.74rem; color:var(--accent); margin-top:.35rem; }
 
 /* ---- guardrail / neviem ---- */
-.gr-line { margin-top:.5rem; font-size:.84rem; color:var(--warn); font-weight:500; }
+.gr-line { margin:.6rem 0 .45rem 0; font-size:.84rem; color:var(--warn);
+  font-weight:500; line-height:1.45; overflow-wrap:break-word; }
 
 /* ---- chat input ---- */
 [data-testid="stChatInput"] { border:1px solid var(--border-2); border-radius:10px; background:var(--surface); }
